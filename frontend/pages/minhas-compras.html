@@ -154,8 +154,10 @@ function render(){
       const nome = prod?.nome || `Produto #${i.produto_id}`;
       return `<div class="item-row"><div class="item-thumb">${prod?.imagem?`<img src="${prod.imagem}" alt="">`:'<span style="font-size:20px">👜</span>'}</div><div class="item-info"><div class="item-nome">${nome}</div><div class="item-meta">${i.quantidade}x • ${i.tamanho?'Tam: '+i.tamanho+' • ':''}${api.formatarMoeda(i.preco_unitario)}</div></div></div>`;
     }).join('') : `<div class="item-row"><div class="item-meta">Itens em processamento...</div></div>`;
-    const rastreio = p.codigo_rastreio ? `
-      <div class="rastreio-box" data-pedido-codigo="${p.codigo_rastreio}" data-pedido="${p.id_pedido||p.id}" data-valor="${total}">
+    const isDF = p.entrega_tipo && (p.entrega_tipo.includes('Retirada') || p.entrega_tipo.includes('Uber'));
+    let rastreio='';
+    if(p.codigo_rastreio){
+      rastreio=`<div class="rastreio-box" data-pedido-codigo="${p.codigo_rastreio}" data-pedido="${p.id_pedido||p.id}" data-valor="${total}">
         <div class="rastreio-head">
           <div>
             <div style="font-size:.82rem;color:#5f6368">Transportadora • ${p.transportadora||'Correios'}</div>
@@ -165,11 +167,14 @@ function render(){
         </div>
         <div id="rastreio-${p.codigo_rastreio}" class="timeline" style="display:none"></div>
         <div style="margin-top:8px;font-size:.8rem;color:#5f6368">Ou acompanhe direto: <a href="https://www2.correios.com.br/sistemas/rastreamento/" target="_blank">site dos Correios</a></div>
-      </div>` : `
-      <div class="rastreio-box" style="background:#fef7e0;border-color:#fde293">
-        <div style="font-weight:600">Aguardando envio</div>
-        <div style="font-size:.9rem;color:#5f6368;margin-top:4px">Seu pagamento foi confirmado. Assim que o admin despachar pelos Correios, o código de rastreio e o WhatsApp chegam automaticamente.</div>
       </div>`;
+    }else if(!isDF){
+      rastreio=`<div class="rastreio-box" style="background:#fef7e0;border-color:#fde293">
+        <div style="font-weight:600">Aguardando envio</div>
+        <div style="font-size:.9rem;color:#5f6368;margin-top:4px">Seu pagamento foi confirmado. Assim que o admin despachar pelos Correios, o código de rastreio chegará aqui.</div>
+      </div>`;
+    }
+    const whatsappBox = isDF ? `<div style="margin-top:12px;padding:12px;background:#e6f4ea;border:1px solid #c8e6c9;border-radius:10px"><div style="font-weight:600;margin-bottom:6px">${p.entrega_tipo==='Retirada no local' ? 'Retirada na loja' : 'Entrega via Uber'}</div><button class="btn-primary" style="width:100%" onclick="whatsappVendedor('${p.id_pedido}','${p.entrega_tipo}','${p.endereco_entrega.replace(/'/g,"\\'")}')">${p.entrega_tipo.includes('Retirada') ? 'Solicitar endereço da loja' : 'Chamar vendedor no WhatsApp'}</button><small style="color:#666">Informa tipo, endereço, nome e nº do pedido</small></div>` : '';
     return `<div class="compra-card">
       <div class="compra-top">
         <div><div class="pedido-id">Pedido ${p.id_pedido||'#'+p.id}</div><div class="pedido-data">${data} • Entrega para todo o Brasil</div></div>
@@ -188,11 +193,18 @@ function render(){
             <div class="resumo-linha resumo-total"><span>Total pago</span><span>${total}</span></div>
             <div class="endereco"><strong>Entrega:</strong><br>${p.endereco_entrega}</div>
           </div>
-          ${rastreio}
+          ${rastreio}${whatsappBox}
         </div>
       </div>
     </div>`;
   }).join('');
+}
+async function whatsappVendedor(idPedido, tipo, endereco){
+  let nome=''; try{ const u=api.getUser(); if(u?.username?.includes('@')){ const c=await api.getClienteByEmail(u.username).catch(()=>null); if(c?.nome) nome=c.nome; } if(!nome){ const raw=sessionStorage.getItem(`cliente_vinculado_${u.username}`)||localStorage.getItem(`cliente_vinculado_${u.username}`); if(raw){ const j=JSON.parse(raw); if(j?.nome) nome=j.nome; } } }catch(_){}
+  if(!nome) nome=api.getUser()?.username||'cliente';
+  const tel=window.VENDEDOR_WHATSAPP||'5561999999999';
+  let msg=tipo.includes('Retirada')?`Olá! Meu pedido ${idPedido} é Retirada na loja. Meu nome é ${nome}. Poderia me enviar o endereço da loja? Pedido: ${idPedido}`:`Olá! Meu pedido ${idPedido} é Entrega via Uber. Meu nome é ${nome}, meu endereço é ${endereco}, tipo: ${tipo}. Pedido: ${idPedido}`;
+  window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`,'_blank');
 }
 function copiar(txt){ navigator.clipboard.writeText(txt); Componentes.toast('Código copiado!','success'); }
 function fmtData(d){ if(!d) return ''; try{ const dt=new Date(d); return dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'})+' '+dt.toLocaleDateString('pt-BR',{weekday:'long'}).slice(0,3); }catch{ return d; } }

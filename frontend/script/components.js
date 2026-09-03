@@ -1093,28 +1093,60 @@ const Componentes = {
     setTimeout(()=> this.verificarRetornoPagamento(), 800);
   },
 
-  // polling após pagamento PIX/preference: quando webhook vira Pago, mostra modal sucesso em home.html
   async verificarRetornoPagamento(){
-    const raw=localStorage.getItem('ultimo_pedido'); if(!raw) return;
-    let ped; try{ ped=JSON.parse(raw);}catch{return;}
-    const user=api.getUser(); if(!user||!user.username||!user.username.includes('@')) return;
-    const cli=await api.getClienteByEmail(user.username).catch(()=>null); if(!cli) return;
-    const tentar=async()=>{
-      try{
-        const data=await api.getPedidos({cliente_id:cli.id, limit:100});
-        const atualizado=(data.pedidos||[]).find(p=> String(p.id)===String(ped.id) || (ped.id_pedido && p.id_pedido===ped.id_pedido));
-        if(!atualizado) return false;
-        const st=(atualizado.status||'').toLowerCase();
-        if(['pago','enviado','entregue'].includes(st)){
+    const raw = localStorage.getItem('ultimo_pedido'); 
+    if (!raw) return;
+    let ped; 
+    try { ped = JSON.parse(raw); } catch { return; }
+    const user = api.getUser(); 
+    if (!user || !user.username || !user.username.includes('@')) return;
+    const cli = await api.getClienteByEmail(user.username).catch(() => null); 
+    if (!cli) return;
+
+    const tentar = async () => {
+      try {
+        const data = await api.getPedidos({ cliente_id: cli.id, limit: 100 });
+        const atualizado = (data.pedidos || []).find(p =>
+          String(p.id) === String(ped.id) || (ped.id_pedido && p.id_pedido === ped.id_pedido)
+        );
+        if (!atualizado) return false;
+        const st = (atualizado.status || '').toLowerCase();
+        if (['pago', 'enviado', 'entregue'].includes(st)) {
           this.mostrarModalSucesso(atualizado);
           localStorage.removeItem('ultimo_pedido');
           return true;
         }
-      }catch(_){ return false; }
+      } catch (_) { return false; }
       return false;
     };
-    if(await tentar()) return;
-    let tent=0; const iv=setInterval(async()=>{ tent++; if(await tentar() || tent>20) clearInterval(iv); }, 3000);
+
+    if (await tentar()) return;
+
+    let tent = 0;
+    const MAX_TENTATIVAS = 40; // 40 x 3s = 2 minutos (era 20 = 60s)
+    const iv = setInterval(async () => {
+      tent++;
+      if (await tentar()) {
+        clearInterval(iv);
+        return;
+      }
+      if (tent > MAX_TENTATIVAS) {
+        clearInterval(iv);
+        this.toast('Ainda estamos confirmando seu pagamento. Você pode acompanhar em "Minhas Compras".', 'info');
+        this._mostrarAvisoDemorado(ped);
+      }
+    }, 3000);
+  },
+
+  _mostrarAvisoDemorado(pedido) {
+    const msg = document.getElementById('modalPedidoMsg');
+    if (msg) {
+      msg.innerHTML += `
+        <div style="margin-top:14px;padding:10px;background:#fff3cd;border-radius:8px;font-size:.85rem">
+          A confirmação está demorando mais que o esperado. Isso não significa que o pagamento falhou —
+          assim que for confirmado você verá em <a href="/pages/minhas-compras.html">Minhas Compras</a>.
+        </div>`;
+    }
   },
 
   mostrarPixQR(pix, pedido){
