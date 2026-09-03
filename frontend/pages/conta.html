@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JP Croco - Minha Conta</title>
+  <link rel="stylesheet" href="/styles/base.css?v=10">
+  <link rel="stylesheet" href="/styles/account.css?v=10">
+</head>
+<body>
+  <div id="header"></div>
+
+  <main>
+    <section class="account-hero">
+      <div class="container">
+        <p class="account-eyebrow">Meu Perfil</p>
+        <h1 class="account-title">Minha Conta</h1>
+        <p class="account-desc">Gerencie seus dados pessoais e informacoes de cadastro.</p>
+      </div>
+    </section>
+
+    <section class="container">
+      <div class="account-grid">
+        <aside class="account-sidebar">
+          <div class="account-avatar" id="accountAvatar">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </div>
+          <h2 class="account-name" id="accountName">Carregando...</h2>
+          <p class="account-email" id="accountEmail">-</p>
+          <div class="account-sidebar-actions">
+            <button class="btn btn-outline btn-block btn-sm" onclick="Conta.logout()">Sair da Conta</button>
+          </div>
+        </aside>
+
+        <div class="account-content">
+          <div class="account-section">
+            <h3 class="account-section-title">Dados da Conta</h3>
+            <p class="account-section-desc">Informacoes de login da sua conta.</p>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="accUsername">Nome de Usuario</label>
+                <input type="text" id="accUsername" readonly disabled style="background:var(--cinza-100);cursor:not-allowed">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="accNomeCompleto">Nome Completo</label>
+                <input type="text" id="accNomeCompleto" name="nome_completo" placeholder="Seu nome completo">
+              </div>
+            </div>
+          </div>
+
+          <div class="account-section">
+            <h3 class="account-section-title">Dados Pessoais</h3>
+            <p class="account-section-desc">Atualize suas informacoes de cadastro.</p>
+
+            <form id="accountForm" onsubmit="Conta.salvar(event)">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="accNome">Nome Completo (Cliente)</label>
+                  <input type="text" id="accNome" name="nome" placeholder="Seu nome">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="accEmail">Email</label>
+                  <input type="email" id="accEmail" name="email" placeholder="seu@email.com">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="accTelefone">Telefone</label>
+                  <input type="tel" id="accTelefone" name="telefone" placeholder="(11) 99999-9999" maxlength="15">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="accCpf">CPF</label>
+                  <input type="text" id="accCpf" name="cpf" placeholder="000.000.000-00" maxlength="14">
+                </div>
+              </div>
+
+              <div class="account-form-actions">
+                <button type="submit" class="btn btn-primary" id="accSaveBtn">
+                  Salvar Alteracoes
+                </button>
+                <button type="button" class="btn btn-ghost" onclick="Conta.cancelar()">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+
+            <div class="account-success" id="accountSuccess" style="display:none">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--verde-lacoste)" stroke-width="2.5">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              <span>Dados atualizados com sucesso!</span>
+            </div>
+          </div>
+
+          <div class="account-section">
+            <h3 class="account-section-title">Seguranca</h3>
+            <p class="account-section-desc">Altere sua senha de acesso.</p>
+            <button class="btn btn-outline btn-sm" onclick="Conta.enviarResetSenha()">
+              Alterar Senha
+            </button>
+            <div class="account-success" id="senhaSuccess" style="display:none;margin-top:12px">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--verde-lacoste)" stroke-width="2.5">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              <span>Link de redefinicao enviado para seu email!</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="footer"></div>
+  <div id="panels"></div>
+  <div id="modal"></div>
+
+  <script src="/script/config.js?v=10"></script>
+  <script src="/script/api.js?v=10"></script>
+  <script src="/script/cart.js?v=10"></script>
+  <script src="/script/components.js?v=10"></script>
+  <script>
+    const Conta = {
+      _clienteId: null,
+      _dadosOriginais: {},
+
+      async init() {
+        if (!api.isLoggedIn()) {
+          window.location.href = '/pages/login.html';
+          return;
+        }
+
+        document.getElementById('header').innerHTML = Componentes.renderizarHeader('conta');
+        document.getElementById('footer').innerHTML = Componentes.renderizarFooter();
+        document.getElementById('panels').innerHTML =
+          Componentes.renderizarPainelSacola() +
+          Componentes.renderizarCheckout();
+        document.getElementById('modal').innerHTML = Componentes.renderizarModalSucesso();
+        Componentes.init();
+
+        this.aplicarMascaras();
+        await this.carregarDados();
+      },
+
+      async carregarDados() {
+        const user = api.getUser();
+        if (!user || !user.username) {
+          window.location.href = '/pages/login.html';
+          return;
+        }
+
+        document.getElementById('accUsername').value = user.username;
+
+        try {
+          const data = await api.getClientes({ email: user.username });
+          const clientes = data.clientes || [];
+
+          if (clientes.length > 0) {
+            const cliente = clientes[0];
+            this._clienteId = cliente.id;
+            this._dadosOriginais = { ...cliente };
+
+            document.getElementById('accountName').textContent = cliente.nome || user.username;
+            document.getElementById('accountEmail').textContent = cliente.email || user.username;
+            document.getElementById('accountAvatar').innerHTML = `
+              <span style="font-size:1.5rem;font-weight:700;color:var(--verde-lacoste)">
+                ${(cliente.nome || user.username).charAt(0).toUpperCase()}
+              </span>
+            `;
+
+            document.getElementById('accNome').value = cliente.nome || '';
+            document.getElementById('accEmail').value = cliente.email || '';
+            document.getElementById('accTelefone').value = cliente.telefone || '';
+            document.getElementById('accCpf').value = cliente.cpf || '';
+          } else {
+            document.getElementById('accountName').textContent = user.username;
+            document.getElementById('accountEmail').textContent = '-';
+            document.getElementById('accountAvatar').innerHTML = `
+              <span style="font-size:1.5rem;font-weight:700;color:var(--verde-lacoste)">
+                ${user.username.charAt(0).toUpperCase()}
+              </span>
+            `;
+          }
+        } catch (err) {
+          console.error('Erro ao carregar dados:', err);
+          document.getElementById('accountName').textContent = user.username;
+          document.getElementById('accountEmail').textContent = '-';
+        }
+
+        try {
+          const usuarios = await api.getUsuarios({ username: user.username });
+          const usuario = usuarios.usuarios?.[0];
+          if (usuario && usuario.nome_completo) {
+            document.getElementById('accNomeCompleto').value = usuario.nome_completo;
+          }
+        } catch (err) {
+          console.error('Erro ao carregar usuario:', err);
+        }
+      },
+
+      async salvar(e) {
+        e.preventDefault();
+        const btn = document.getElementById('accSaveBtn');
+        const nome = document.getElementById('accNome').value.trim();
+        const email = document.getElementById('accEmail').value.trim();
+        const telefone = document.getElementById('accTelefone').value.trim();
+        const cpf = document.getElementById('accCpf').value.trim();
+        const nomeCompleto = document.getElementById('accNomeCompleto').value.trim();
+
+        if (!nome || !email) {
+          Componentes.toast('Preencha os campos obrigatorios (Nome e Email).', 'error');
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Salvando...';
+
+        try {
+          const user = api.getUser();
+
+          if (this._clienteId) {
+            const payload = {};
+            if (nome !== this._dadosOriginais.nome) payload.nome = nome;
+            if (email !== this._dadosOriginais.email) payload.email = email;
+            if (telefone !== this._dadosOriginais.telefone) payload.telefone = telefone;
+            if (cpf !== this._dadosOriginais.cpf) payload.cpf = cpf;
+
+            if (Object.keys(payload).length > 0) {
+              await api.updateCliente(this._clienteId, payload);
+              this._dadosOriginais = { ...this._dadosOriginais, ...payload };
+            }
+          } else {
+            const novoCliente = await api.createCliente({ nome, email, telefone, cpf });
+            this._clienteId = novoCliente.id;
+            this._dadosOriginais = { ...novoCliente };
+          }
+
+          document.getElementById('accountName').textContent = nome || user.username;
+          document.getElementById('accountEmail').textContent = email || user.username;
+          document.getElementById('accountAvatar').innerHTML = `
+            <span style="font-size:1.5rem;font-weight:700;color:var(--verde-lacoste)">
+              ${(nome || user.username).charAt(0).toUpperCase()}
+            </span>
+          `;
+
+          try{ const u=api.getUser(); if(u?.username) sessionStorage.setItem(`cliente_vinculado_${u.username}`, JSON.stringify({id:this._clienteId, email, nome})); }catch(_){}
+          const success = document.getElementById('accountSuccess');
+          success.style.display = 'flex';
+          setTimeout(() => { success.style.display = 'none'; }, 3000);
+
+          Componentes.toast('Dados atualizados com sucesso!', 'success');
+        } catch (err) {
+          Componentes.toast(err.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Salvar Alteracoes';
+        }
+      },
+
+      cancelar() {
+        if (this._clienteId) {
+          document.getElementById('accNome').value = this._dadosOriginais.nome || '';
+          document.getElementById('accEmail').value = this._dadosOriginais.email || '';
+          document.getElementById('accTelefone').value = this._dadosOriginais.telefone || '';
+          document.getElementById('accCpf').value = this._dadosOriginais.cpf || '';
+        } else {
+          document.getElementById('accNome').value = '';
+          document.getElementById('accEmail').value = '';
+          document.getElementById('accTelefone').value = '';
+          document.getElementById('accCpf').value = '';
+        }
+        document.getElementById('accountSuccess').style.display = 'none';
+      },
+
+      logout() {
+        api.clearToken();
+        Carrinho.limpar();
+        window.location.href = '/pages/login.html';
+      },
+
+      async enviarResetSenha() {
+        try {
+          const email = this._dadosOriginais.email;
+          if (!email) {
+            Componentes.toast('Cadastre seus dados pessoais primeiro para poder redefinir a senha.', 'error');
+            return;
+          }
+          await api.esqueciSenha(email);
+          const el = document.getElementById('senhaSuccess');
+          el.style.display = 'flex';
+          setTimeout(() => { el.style.display = 'none'; }, 5000);
+          Componentes.toast('Link de redefinicao enviado para seu email!', 'success');
+        } catch (err) {
+          Componentes.toast(err.message, 'error');
+        }
+      },
+
+      aplicarMascaras() {
+        const tel = document.getElementById('accTelefone');
+        if (tel && !tel._mascaraAplicada) {
+          tel._mascaraAplicada = true;
+          tel.addEventListener('input', (e) => {
+            let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+            if (v.length > 6) v = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
+            else if (v.length > 2) v = `(${v.slice(0,2)}) ${v.slice(2)}`;
+            else if (v.length > 0) v = `(${v}`;
+            e.target.value = v;
+          });
+        }
+
+        const cpf = document.getElementById('accCpf');
+        if (cpf && !cpf._mascaraAplicada) {
+          cpf._mascaraAplicada = true;
+          cpf.addEventListener('input', (e) => {
+            let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+            v = v.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+            e.target.value = v;
+          });
+        }
+      },
+    };
+
+    Conta.init();
+  </script>
+</body>
+</html>

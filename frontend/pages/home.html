@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JP Croco - Moda com Atitude</title>
+  <link rel="stylesheet" href="/styles/base.css?v=10">
+  <link rel="stylesheet" href="/styles/loja.css?v=10">
+  <link rel="stylesheet" href="/styles/home.css?v=10">
+</head>
+<body>
+  <div id="header"></div>
+
+  <main>
+    <section class="home-hero">
+      <div class="hero-decoration"></div>
+      <div class="container hero-content">
+        <p class="hero-eyebrow">Colecao Exclusiva 2026</p>
+        <h1 class="hero-title">Elegancia que nasce da <em>confianca</em></h1>
+        <p class="hero-desc">
+          Descubra a nova colecao JP Croco. Pecas que unem sofisticacao e conforto
+          para quem define o jogo antes de entra-lo.
+        </p>
+        <div class="hero-actions">
+          <a href="/pages/loja.html" class="btn btn-white">Comprar Agora</a>
+          <a href="#destaques" class="btn btn-outline" style="border-color:rgba(255,255,255,0.4);color:#fff">Ver Destaques</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="features-section">
+      <div class="container">
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Entrega Local</h3>
+            <p class="feature-desc">Retire diretamente com a loja. Combine a entrega pelo painel administrativo.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 4h16v16H4z"/>
+                <path d="M4 10h16"/>
+                <path d="M10 4v16"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Qualidade Premium</h3>
+            <p class="feature-desc">Materiais selecionados e acabamento impecavel em cada peca.</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 6l-9.5 9.5-5-5L1 18"/>
+                <path d="M17 6h6v6"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Troca Facil</h3>
+            <p class="feature-desc">Troca gratuita em ate 30 dias. Sua satisfacao e nossa prioridade.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="destaques-section" id="destaques">
+      <div class="container">
+        <div class="section-header center">
+          <h2 class="section-title">Destaques</h2>
+          <p class="section-subtitle">As pecas mais procuradas da nossa colecao</p>
+        </div>
+        <div class="produtos-grid" id="destaquesGrid">
+          <div class="loading-spinner"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-section">
+      <div class="container">
+        <div class="about-grid">
+          <div class="about-image"></div>
+          <div class="about-content">
+            <p class="hero-eyebrow" style="color:var(--verde-lacoste)">Nossa Historia</p>
+            <h2 class="section-title">Desde 2026, definindo<br>o padrao</h2>
+            <p class="about-text">
+              A JP Croco nasceu da paixao por moda que ousa. Cada peca e criada pensando
+              em quem nao se contenta com o comum. Nosso crocodilo e o simbolo de quem
+              lidera com confianca e estilo.
+            </p>
+            <a href="/pages/loja.html" class="btn btn-primary">Ver Colecao</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section">
+      <div class="container">
+        <h2 class="cta-title">Pronto para se destacar?</h2>
+        <p class="cta-text">Explore nossa colecao completa e encontre a peca que define o seu estilo.</p>
+        <a href="/pages/loja.html" class="btn btn-white btn-lg">Explorar Loja</a>
+      </div>
+    </section>
+  </main>
+
+  <div id="footer"></div>
+  <div id="panels"></div>
+  <div id="modal"></div>
+  <div id="detailModal"></div>
+
+  <script src="/script/config.js?v=10"></script>
+  <script src="/script/api.js?v=10"></script>
+  <script src="/script/cart.js?v=10"></script>
+  <script src="/script/components.js?v=10"></script>
+  <script>
+    const Home = {
+      produtos: [],
+      async init() {
+        document.getElementById('header').innerHTML = Componentes.renderizarHeader('home');
+        document.getElementById('footer').innerHTML = Componentes.renderizarFooter();
+        document.getElementById('panels').innerHTML =
+          Componentes.renderizarPainelSacola() +
+          Componentes.renderizarCheckout();
+        document.getElementById('modal').innerHTML = Componentes.renderizarModalSucesso();
+        document.getElementById('detailModal').innerHTML = Componentes.renderizarModalDetalhe();
+        Componentes.init();
+        await this.carregarDestaques();
+      },
+
+      async carregarDestaques() {
+        const grid = document.getElementById('destaquesGrid');
+        try {
+          const data = await api.getProdutos({ limit: 4 });
+          const produtos = data.produtos || [];
+          this.produtos = produtos;
+
+          if (produtos.length === 0) {
+            grid.innerHTML = '<p class="text-center" style="grid-column:1/-1;color:var(--cinza-500)">Nenhum produto encontrado.</p>';
+            return;
+          }
+
+          grid.innerHTML = produtos.map(p => {
+            const semEstoque = p.stock <= 0;
+            const temPromo = p.preco_promocional != null && p.preco_promocional < p.preco;
+            const tamanhosPreview = (p.tamanhos && p.tamanhos.length)
+              ? p.tamanhos.map(t => t.tamanho).join(' / ')
+              : (p.tamanho || null);
+            return `
+            <article class="produto-item" onclick="Home.abrirDetalhe(${p.id})">
+              <div class="produto-img-wrap">
+                ${p.imagem ? `<img src="${p.imagem}" alt="${p.nome}" style="width:100%;height:100%;object-fit:cover">` : `<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>`}
+                ${semEstoque ? '<span class="produto-tag sem-estoque">Esgotado</span>' : (temPromo ? '<span class="produto-tag promo">Promo</span>' : '')}
+              </div>
+              <div class="produto-body">
+                <h3 class="produto-name">${p.nome}</h3>
+                <p class="produto-size">${tamanhosPreview ? `Tamanhos: ${tamanhosPreview}` : ''}</p>
+                <div class="produto-row">
+                  <span class="produto-price">
+                    ${temPromo
+                      ? `<span class="preco-promo">${api.formatarMoeda(p.preco_promocional)}</span> <span class="preco-riscado">${api.formatarMoeda(p.preco)}</span>`
+                      : api.formatarMoeda(p.preco)}
+                  </span>
+                  <span class="produto-stock">${p.stock > 0 ? `${p.stock} em estoque` : 'Sem estoque'}</span>
+                </div>
+              </div>
+            </article>
+          `;
+          }).join('');
+
+          Componentes.atualizarBotoesProduto();
+        } catch (err) {
+          grid.innerHTML = `
+            <div style="grid-column:1/-1;text-align:center;padding:40px">
+              <p style="color:var(--cinza-500);margin-bottom:16px">Nao foi possivel carregar os produtos.</p>
+              <button class="btn btn-outline btn-sm" onclick="Home.carregarDestaques()">Tentar Novamente</button>
+            </div>
+          `;
+        }
+      },
+
+      adicionarAoCarrinho(produto, tamanho = '') {
+        Carrinho.adicionar(produto, tamanho);
+        Componentes.atualizarBotoesProduto();
+        Componentes.abrirSacola();
+      },
+
+      abrirDetalhe(id) {
+        Componentes.abrirDetalhe(id, this.produtos);
+      },
+
+      verificarPagamento() {
+        const params = new URLSearchParams(window.location.search);
+        // O Mercado Pago devolve collection_status/status no retorno do
+        // Checkout Pro. Mantém "pagamento" por compatibilidade com links
+        // antigos da aplicação.
+        const statusMp = params.get('collection_status') || params.get('status');
+        const status = {
+          approved: 'sucesso',
+          rejected: 'falha',
+          cancelled: 'falha',
+          pending: 'pendente',
+          in_process: 'pendente',
+        }[statusMp] || params.get('pagamento');
+        if (!status) return;
+
+        const mensagens = {
+          sucesso: { texto: 'Pagamento aprovado! Seu pedido foi confirmado.', tipo: 'success' },
+          falha: { texto: 'Pagamento nao realizado. Tente novamente.', tipo: 'error' },
+          pendente: { texto: 'Pagamento em analise. Voce recebera uma confirmacao em breve.', tipo: 'info' },
+        };
+
+        const msg = mensagens[status];
+        if (msg) {
+          setTimeout(() => Componentes.toast(msg.texto, msg.tipo), 500);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      },
+    };
+
+    Home.init();
+    Home.verificarPagamento();
+  </script>
+</body>
+</html>

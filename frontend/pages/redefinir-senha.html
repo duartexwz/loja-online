@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JP Croco - Redefinir Senha</title>
+  <link rel="stylesheet" href="/styles/base.css?v=10">
+  <link rel="stylesheet" href="/styles/login.css?v=10">
+</head>
+<body>
+  <div id="app" class="auth-page">
+    <div class="auth-hero">
+      <div class="auth-card">
+        <div class="auth-header">
+          <div class="auth-logo">
+            <svg class="auth-logo-icon" width="40" height="28" viewBox="0 0 40 28" fill="none">
+              <path d="M20 0C12 0 6 5 3 10c-2 3-3 7-1 11 1 2 3 4 5 5l1-2c-1-2-2-3-3-5C4 14 5 10 8 7c3-3 8-6 12-6s9 3 12 6c3 3 4 7 3 11-1 2-2 4-3 5l1 2c2-1 4-3 5-5 2-4 1-8-1-11C34 5 28 0 20 0z" fill="currentColor"/>
+              <path d="M20 8c-3 0-6 2-7 5l2 1c1-2 3-3 5-3s4 1 5 3l2-1c-1-3-4-5-7-5z" fill="currentColor"/>
+              <path d="M14 18c0 3 3 6 6 6s6-3 6-6-3-6-6-6-6 3-6 6z" fill="currentColor"/>
+            </svg>
+            <span class="auth-logo-text">JP CROCO</span>
+          </div>
+          <div id="resetView">
+            <h1 class="auth-title">Redefinir Senha</h1>
+            <p class="auth-subtitle">Digite sua nova senha abaixo</p>
+          </div>
+          <div id="resetSuccessView" style="display:none">
+            <h1 class="auth-title">Senha Alterada!</h1>
+            <p class="auth-subtitle">Sua senha foi redefinida com sucesso</p>
+          </div>
+          <div id="resetErrorView" style="display:none">
+            <h1 class="auth-title">Link Invalido</h1>
+            <p class="auth-subtitle">O link de redefinicao expirou ou e invalido</p>
+          </div>
+        </div>
+
+        <div class="auth-body">
+          <div class="auth-error" id="resetError"></div>
+
+          <form id="resetForm" onsubmit="ResetSenha.redefinir(event)" style="display:none">
+            <div class="form-group">
+              <label class="form-label" for="novaSenha">Nova Senha</label>
+              <input type="password" id="novaSenha" name="nova_senha" required placeholder="Minimo 6 caracteres" minlength="6" autocomplete="new-password">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="confirmarSenha">Confirmar Nova Senha</label>
+              <input type="password" id="confirmarSenha" name="confirm_senha" required placeholder="Confirme a senha" minlength="6" autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-lg" id="resetBtn">
+              Redefinir Senha
+            </button>
+          </form>
+
+          <div id="resetSuccess" style="display:none">
+            <div class="auth-success">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--verde-lacoste)" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                <path d="M22 4L12 14.01l-3-3"/>
+              </svg>
+              <h3>Senha redefinida!</h3>
+              <p>Sua senha foi alterada com sucesso. Voce ja pode fazer login com a nova senha.</p>
+              <a href="/pages/login.html" class="btn btn-primary btn-block">Fazer Login</a>
+            </div>
+          </div>
+
+          <div id="resetErrorState" style="display:none">
+            <div class="auth-success">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--erro)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="15" y1="9" x2="9" y2="15"/>
+                <line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
+              <h3 style="color:var(--erro)">Link invalido ou expirado</h3>
+              <p>O link de redefinicao de senha nao e valido ou ja expirou. Solicite um novo link.</p>
+              <a href="/pages/login.html" class="btn btn-primary btn-block">Voltar ao Login</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="auth-footer-link">
+          <a href="/pages/login.html">&larr; Voltar para o login</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/script/config.js?v=10"></script>
+  <script src="/script/api.js?v=10"></script>
+  <script>
+    const ResetSenha = {
+      token: null,
+
+      init() {
+        const params = new URLSearchParams(window.location.search);
+        this.token = params.get('token');
+
+        if (!this.token) {
+          this.mostrarEstado('error');
+          return;
+        }
+
+        document.getElementById('resetForm').style.display = 'block';
+      },
+
+      async redefinir(e) {
+        e.preventDefault();
+        this.limparErro();
+
+        const btn = document.getElementById('resetBtn');
+        const novaSenha = document.getElementById('novaSenha').value;
+        const confirmarSenha = document.getElementById('confirmarSenha').value;
+
+        if (!novaSenha || !confirmarSenha) {
+          this.mostrarErro('Preencha todos os campos.');
+          return;
+        }
+
+        if (novaSenha !== confirmarSenha) {
+          this.mostrarErro('As senhas nao conferem.');
+          return;
+        }
+
+        if (novaSenha.length < 6) {
+          this.mostrarErro('A senha deve ter no minimo 6 caracteres.');
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Redefinindo...';
+
+        try {
+          await api.redefinirSenha(this.token, novaSenha);
+          this.mostrarEstado('success');
+        } catch (err) {
+          this.mostrarErro(err.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Redefinir Senha';
+        }
+      },
+
+      mostrarEstado(estado) {
+        document.getElementById('resetView').style.display = 'none';
+        document.getElementById('resetForm').style.display = 'none';
+        document.getElementById('resetSuccessView').style.display = 'none';
+        document.getElementById('resetErrorView').style.display = 'none';
+        document.getElementById('resetSuccess').style.display = 'none';
+        document.getElementById('resetErrorState').style.display = 'none';
+
+        if (estado === 'success') {
+          document.getElementById('resetSuccessView').style.display = 'block';
+          document.getElementById('resetSuccess').style.display = 'block';
+        } else if (estado === 'error') {
+          document.getElementById('resetErrorView').style.display = 'block';
+          document.getElementById('resetErrorState').style.display = 'block';
+        }
+      },
+
+      mostrarErro(msg) {
+        const el = document.getElementById('resetError');
+        el.textContent = msg;
+        el.classList.add('ativo');
+      },
+
+      limparErro() {
+        const el = document.getElementById('resetError');
+        el.classList.remove('ativo');
+      },
+    };
+
+    ResetSenha.init();
+  </script>
+</body>
+</html>
