@@ -107,7 +107,7 @@
 <script src="/script/config.js?v=21"></script>
 <script src="/script/api.js?v=21"></script>
 <script src="/script/cart.js?v=21"></script>
-<script src="/script/components.js?v=24"></script>
+<script src="/script/components.js?v=25"></script>
 <script>
 let _pedidos=[], _produtosMap=new Map(), _filtro='todos';
 async function init(){
@@ -152,7 +152,7 @@ function render(){
     const itensHTML = itens.length ? itens.map(i=>{
       const prod=_produtosMap.get(i.produto_id);
       const img = prod?.imagem ? `<img src="${prod.imagem}" alt="${prod.nome}">` : '👜';
-      const nome = prod?.nome || `Produto #${i.produto_id}`;
+      const nome = prod?.nome || 'Produto';
       return `<div class="item-row"><div class="item-thumb">${prod?.imagem?`<img src="${prod.imagem}" alt="">`:'<span style="font-size:20px">👜</span>'}</div><div class="item-info"><div class="item-nome">${nome}</div><div class="item-meta">${i.quantidade}x • ${i.tamanho?'Tam: '+i.tamanho+' • ':''}${api.formatarMoeda(i.preco_unitario)}</div></div></div>`;
     }).join('') : `<div class="item-row"><div class="item-meta">Itens em processamento...</div></div>`;
     const isDF = p.entrega_tipo && (p.entrega_tipo.includes('Retirada') || p.entrega_tipo.includes('Uber'));

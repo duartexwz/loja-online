@@ -1045,10 +1045,6 @@ const Componentes = {
                   <span class="detail-spec-label">Estoque</span>
                   <span class="detail-spec-value" id="detailStock"></span>
                 </div>
-                <div class="detail-spec-row">
-                  <span class="detail-spec-label">ID</span>
-                  <span class="detail-spec-value" id="detailId"></span>
-                </div>
               </div>
               <div class="size-selector" id="sizeSelector"></div>
               <div class="detail-qty">
@@ -1104,7 +1100,6 @@ const Componentes = {
       : api.formatarMoeda(p.preco);
     document.getElementById('detailSizes').textContent = tamanhos.length ? tamanhos.map(t => t.tamanho).join(', ') : '—';
     document.getElementById('detailStock').textContent = p.stock > 0 ? `${p.stock} unidades` : 'Esgotado';
-    document.getElementById('detailId').textContent = `#${p.id}`;
     document.getElementById('detailQtd').textContent = '1';
     document.getElementById('detailTag').textContent = temPromo ? 'Promocao' : 'Produto';
 
