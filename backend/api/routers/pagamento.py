@@ -246,28 +246,22 @@ async def mercadopago_webhook(request: Request, db: dbConnection):
 
         # Se o pagamento for aprovado, atualiza o status do pedido no banco
         if payment_status == 'approved':
-            pedido_atual = await db.fetchrow('SELECT id, status FROM pedidos WHERE id = $1', pedido_id)
-
-            if not pedido_atual:
-                raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Pedido não encontrado')
-
-            # Ja pago: o webhook pode ser chamado mais de uma vez;
-            # nao decrementa o estoque novamente.
-            if pedido_atual['status'] == 'Pago':
-                return Response(status_code=HTTPStatus.OK)
-
             async with db.transaction():
                 query = """
                     UPDATE pedidos
                     SET status = $1
-                    WHERE id = $2
+                    WHERE id = $2 AND status != 'Pago'
                     RETURNING id, cliente_id, status, endereco_entrega, id_pedido
                 """
 
                 pedido_atualizado = await db.fetchrow(query, 'Pago', pedido_id)
 
                 if not pedido_atualizado:
-                    raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Pedido não encontrado')
+                    # Ou o pedido não existe, ou já estava 'Pago' (webhook duplicado/concorrente).
+                    pedido_existe = await db.fetchval('SELECT 1 FROM pedidos WHERE id = $1', pedido_id)
+                    if not pedido_existe:
+                        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Pedido não encontrado')
+                    return Response(status_code=HTTPStatus.OK)
 
                 # Dar baixa no estoque de cada item comprado (produto + tamanho)
                 await _dar_baixa_estoque(db, pedido_id)

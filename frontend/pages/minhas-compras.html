@@ -122,7 +122,7 @@ async function init(){
       api.getProdutos({limit:1000}).catch(()=>({produtos:[]})),
     ]);
     (prods.produtos||[]).forEach(p=>_produtosMap.set(p.id,p));
-    _pedidos=(data.pedidos||[]).slice().reverse();
+    _pedidos=(data.pedidos||[]).slice().sort((a,b)=> new Date(b.data_pedido||0)-new Date(a.data_pedido||0) || b.id - a.id);
     if(!_pedidos.length){ document.getElementById('comprasList').innerHTML=emptyHTML('Você ainda não tem pedidos','Que tal explorar nossa coleção?','/pages/loja.html','Ver produtos'); return; }
     // pré-carrega itens para todos pedidos em paralelo
     const itensAll = await Promise.all(_pedidos.map(p=> api.getItensPedido({pedido_id:p.id,limit:1000}).then(r=>({pid:p.id, itens:r.itens_pedido||r.itens||[]})).catch(()=>({pid:p.id,itens:[]}))));
@@ -177,7 +177,7 @@ function render(){
     const whatsappBox = isDF ? `<div style="margin-top:12px;padding:12px;background:#e6f4ea;border:1px solid #c8e6c9;border-radius:10px"><div style="font-weight:600;margin-bottom:6px">${p.entrega_tipo==='Retirada no local' ? 'Retirada na loja' : 'Entrega via Uber'}</div><button class="btn-primary" style="width:100%" onclick="whatsappVendedor('${p.id_pedido}','${p.entrega_tipo}','${p.endereco_entrega.replace(/'/g,"\\'")}')">${p.entrega_tipo.includes('Retirada') ? 'Solicitar endereço da loja' : 'Chamar vendedor no WhatsApp'}</button><small style="color:#666">Informa tipo, endereço, nome e nº do pedido</small></div>` : '';
     return `<div class="compra-card">
       <div class="compra-top">
-        <div><div class="pedido-id">Pedido ${p.id_pedido||'#'+p.id}</div><div class="pedido-data">${data} • Entrega para todo o Brasil</div></div>
+        <div><div class="pedido-id">Pedido ${p.id_pedido||'#'+p.id}</div><div class="pedido-data">${data} • ${p.entrega_tipo || 'Entrega'}</div></div>
         <div class="badges"><span class="badge ${badgeCls(p.status)}">${badgeIcon(p.status)} ${p.status}</span></div>
       </div>
       <div class="compra-body">
@@ -189,9 +189,9 @@ function render(){
         <div>
           <div class="resumo-box">
             <div class="resumo-linha"><span>Subtotal</span><span>${total}</span></div>
-            <div class="resumo-linha"><span>Frete</span><span style="color:#137333">Grátis • Brasil todo</span></div>
+            ${isDF ? '' : `<div class="resumo-linha"><span>Frete</span><span style="color:#137333">Grátis • Brasil todo</span></div>`}
             <div class="resumo-linha resumo-total"><span>Total pago</span><span>${total}</span></div>
-            <div class="endereco"><strong>Entrega:</strong><br>${p.endereco_entrega}</div>
+            <div class="endereco"><strong>${isDF ? p.entrega_tipo : 'Entrega'}:</strong><br>${p.endereco_entrega}</div>
           </div>
           ${rastreio}${whatsappBox}
         </div>
