@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import asyncpg
 import mercadopago
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 
 from api.database import get_db
 from api.security import get_current_user
@@ -17,8 +17,81 @@ WEBHOOK_SECRET = settings.MERCADOPAGO_WEBHOOK_SECRET
 
 
 router = APIRouter(prefix='/webhook', tags=['webhook'])
+payments_router = APIRouter(prefix='/api/payments', tags=['payments'])
 dbConnection = Annotated[asyncpg.Connection, Depends(get_db)]
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+
+@router.get('/public-key')
+async def get_public_key():
+    return {'public_key': settings.MERCADOPAGO_PUBLIC_KEY}
+
+
+@payments_router.get('/public-key')
+async def get_public_key_payments():
+    return {'public_key': settings.MERCADOPAGO_PUBLIC_KEY}
+
+
+@payments_router.post('/process')
+async def process_brick_payment(request: Request, db: dbConnection, current_user: CurrentUser):
+    import uuid
+    idempotency_key = request.headers.get('X-Idempotency-Key') or str(uuid.uuid4())
+    payload = await request.json()
+    pedido_id = payload.get('pedido_id')
+    if not pedido_id:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='pedido_id obrigatório')
+    pedido = await db.fetchrow('SELECT id, valor_total FROM pedidos WHERE id=$1', int(pedido_id))
+    if not pedido:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Pedido não encontrado')
+    if float(pedido['valor_total'] or 0) <= 0:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Valor do pedido inválido para pagamento (total zerado). Refaça o pedido.')
+    # Brick onSubmit envia {formData, selectedPaymentMethod} ou direto
+    form = payload.get('formData') or payload
+    token = form.get('token')
+    payment_method_id = form.get('payment_method_id') or payload.get('payment_method_id')
+    # Brick informa Pix como 'bank_transfer'; /v1/payments exige 'pix'
+    if (payment_method_id or '').lower() == 'bank_transfer':
+        payment_method_id = 'pix'
+    installments = form.get('installments') or payload.get('installments') or 1
+    issuer_id = form.get('issuer_id') or payload.get('issuer_id')
+    payer = form.get('payer') or payload.get('payer') or {}
+    email = payer.get('email') or 'comprador@email.com'
+    # Pix via Brick não tem token
+    payment_data = {
+        'transaction_amount': float(pedido['valor_total']),
+        'description': f'Pedido #{pedido["id"]}',
+        'payment_method_id': payment_method_id,
+        'external_reference': str(pedido['id']),
+        'payer': {'email': email},
+        'notification_url': settings.WEBHOOK_URL or None,
+    }
+    if token:
+        payment_data['token'] = token
+        payment_data['installments'] = int(installments)
+        if issuer_id:
+            payment_data['issuer_id'] = issuer_id
+    payment_data = {k:v for k,v in payment_data.items() if v is not None}
+    # X-Idempotency-Key evita dupla cobrança em reenvio do Brick
+    request_options = mercadopago.config.RequestOptions(custom_headers={'x-idempotency-key': idempotency_key})
+    try:
+        resp = sdk.payment().create(payment_data, request_options)
+    except Exception as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+    if resp.get('status') not in (200,201):
+        _alertar_credencial_mp(resp.get('status'))
+        import logging as _lg
+        _lg.getLogger('pagamento').warning('MP payments recusou (%s): %s', resp.get('status'), str(resp.get('response'))[:300])
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(resp.get('response')))
+    r = resp.get('response',{})
+    if (r.get('status') or '').lower() in ('rejected', 'cancelled'):
+        import logging as _lg2
+        _lg2.getLogger('pagamento').warning('MP recusou pagamento pedido %s: %s/%s', pedido_id, r.get('status'), r.get('status_detail'))
+    point = r.get('point_of_interaction',{}).get('transaction_data',{})
+    if r.get('status')=='approved':
+        await db.execute("UPDATE pedidos SET status='Pago' WHERE id=$1", int(pedido_id))
+        try: await _dar_baixa_estoque(db, int(pedido_id))
+        except: pass
+    return {'id': r.get('id'), 'status': r.get('status'), 'status_detail': r.get('status_detail'), 'qr_code_base64': point.get('qr_code_base64'), 'qr_code': point.get('qr_code'), 'ticket_url': point.get('ticket_url')}
 
 
 def _url_retorno_pagamento(frontend_url: str) -> str | None:
@@ -85,6 +158,53 @@ async def criar_pix(pedido_id: int, db: dbConnection, current_user: CurrentUser)
         'qr_code': qr_code,
         'valor': float(pedido['valor_total']),
     }
+
+
+@router.post('/brick-payment')
+async def brick_payment(payload: dict, db: dbConnection, current_user: CurrentUser):
+    pedido_id = payload.get('pedido_id')
+    if not pedido_id:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='pedido_id obrigatório')
+    pedido = await db.fetchrow('SELECT id, valor_total FROM pedidos WHERE id=$1', int(pedido_id))
+    if not pedido:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Pedido não encontrado')
+    if float(pedido['valor_total'] or 0) <= 0:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Valor do pedido inválido para pagamento (total zerado). Refaça o pedido.')
+    form = payload.get('formData') or payload
+    token = form.get('token')
+    payment_method_id = form.get('payment_method_id')
+    installments = form.get('installments') or 1
+    issuer_id = form.get('issuer_id')
+    payer = form.get('payer', {})
+    email = payer.get('email') or 'comprador@email.com'
+    payment_data = {
+        'transaction_amount': float(pedido['valor_total']),
+        'description': f'Pedido #{pedido["id"]}',
+        'payment_method_id': payment_method_id,
+        'token': token,
+        'installments': int(installments),
+        'external_reference': str(pedido['id']),
+        'payer': {'email': email},
+        'notification_url': settings.WEBHOOK_URL or None,
+    }
+    if issuer_id:
+        payment_data['issuer_id'] = issuer_id
+    # remove Nones
+    payment_data = {k:v for k,v in payment_data.items() if v is not None}
+    try:
+        resp = sdk.payment().create(payment_data)
+    except Exception as e:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e))
+    if resp.get('status') not in (200,201):
+        _alertar_credencial_mp(resp.get('status'))
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(resp.get('response')))
+    r = resp.get('response',{})
+    # se approved já atualiza
+    if r.get('status')=='approved':
+        await db.execute("UPDATE pedidos SET status='Pago' WHERE id=$1", int(pedido_id))
+        try: await _dar_baixa_estoque(db, int(pedido_id))
+        except: pass
+    return {'id': r.get('id'), 'status': r.get('status'), 'status_detail': r.get('status_detail')}
 
 
 @router.post('/criar-preferencia')
@@ -162,6 +282,22 @@ async def _dar_baixa_estoque(db: asyncpg.Connection, pedido_id: int) -> None:
                 item['tamanho'],
             )
 
+def _alertar_credencial_mp(http_status) -> None:
+    """Se o MP rejeitar com 401/403/404, as credenciais morreram/rodaram:
+    avisa o admin por push na hora (não espera o Brick quebrar em silêncio)."""
+    if http_status not in (401, 403, 404):
+        return
+    try:
+        import asyncio
+        from api.routers.push import tarefa_push_admins
+        asyncio.create_task(tarefa_push_admins(
+            '⚠️ Credenciais Mercado Pago inválidas',
+            f'MP retornou {http_status}. Confira Access Token/Public Key no painel MP (podem ter sido regeneradas).',
+        ))
+    except Exception:
+        pass
+
+
 def validar_assinatura(request: Request, resource_id: str) -> bool:
 
     x_signature = request.headers.get('x-signature')
@@ -191,7 +327,7 @@ def validar_assinatura(request: Request, resource_id: str) -> bool:
 
 
 @router.post('/mercadopago')
-async def mercadopago_webhook(request: Request, db: dbConnection):
+async def mercadopago_webhook(request: Request, db: dbConnection, background: BackgroundTasks):
 
     # pega os parametros da URL e o corpo da requisição
     query_params = request.query_params
@@ -265,6 +401,13 @@ async def mercadopago_webhook(request: Request, db: dbConnection):
 
                 # Dar baixa no estoque de cada item comprado (produto + tamanho)
                 await _dar_baixa_estoque(db, pedido_id)
+                # Push no aparelho do admin (pagamento aprovado via webhook)
+                try:
+                    from api.routers.push import agendar_push
+                    idp = pedido_atualizado.get('id_pedido') or f'#{pedido_id}'
+                    agendar_push(background, '✅ Pagamento aprovado!', f'Pedido {idp} pago e confirmado.')
+                except Exception:
+                    pass
 
         # Caso nao seja, atualizar para pedido recusado
         elif payment_status == 'rejected':

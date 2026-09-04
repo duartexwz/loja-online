@@ -12,7 +12,7 @@ COPY pyproject.toml poetry.lock ./
 
 RUN poetry config virtualenvs.create false \
     && poetry install --no-root --no-interaction --no-ansi \
-    && pip install --no-cache-dir httpx
+    && pip install --no-cache-dir httpx pywebpush
 
 COPY api ./api
 COPY schema.sql ./

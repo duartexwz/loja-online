@@ -250,7 +250,7 @@
 
 .about-image {
   height: 500px;
-  background: url('https://images.unsplash.com/photo-1551085254-e96b210db58a?w=900&q=80') center/cover no-repeat;
+  background: linear-gradient(135deg, var(--verde-escuro) 0%, var(--verde-lacoste) 60%, var(--verde-medio) 100%);
   border-radius: var(--radius-xl);
   position: relative;
   overflow: hidden;
@@ -318,7 +318,7 @@
   position: relative;
   padding: 60px 0;
   text-align: center;
-  background: url('https://images.unsplash.com/photo-1622398925373-3f91b1e275f6?w=1920&q=80') center/cover no-repeat;
+  background: linear-gradient(135deg, #0a1e12 0%, var(--verde-lacoste) 100%);
   overflow: hidden;
 }
 

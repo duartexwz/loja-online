@@ -14,6 +14,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str
     MERCADOPAGO_ACCESS_TOKEN: str
+    # Sem default de teste: chave errada = Brick quebrado silenciosamente.
+    # Preencha MERCADOPAGO_PUBLIC_KEY no .env (credenciais de produção).
+    MERCADOPAGO_PUBLIC_KEY: str = ''
+    # Web Push (VAPID) — push no aparelho do admin mesmo com o site fechado
+    VAPID_PUBLIC_KEY: str = ''
+    VAPID_PRIVATE_KEY: str = ''
+    VAPID_SUBJECT: str = 'mailto:admin@jpcroco.com.br'
     MERCADOPAGO_WEBHOOK_SECRET: str
     # URL pública única do frontend. O Mercado Pago aceita URLs de retorno
     # apenas em HTTPS; configure-a sem caminho, query string ou múltiplas URLs.

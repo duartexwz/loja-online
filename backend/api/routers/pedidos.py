@@ -28,7 +28,7 @@ router = APIRouter(prefix='/pedidos', tags=['pedidos'])
 
 
 @router.post('/', status_code=HTTPStatus.CREATED, response_model=PedidosResponseSchema)
-async def create_pedido(pedido: PedidosSchema, db: database_loja, current_user: CurrentUser):
+async def create_pedido(pedido: PedidosSchema, db: database_loja, current_user: CurrentUser, background: BackgroundTasks):
 
     id_pedido = await gerar_codigo_unico(db)
 
@@ -46,6 +46,13 @@ async def create_pedido(pedido: PedidosSchema, db: database_loja, current_user: 
         raise HTTPException(status_code=HTTPStatus.CONFLICT, detail='Já existe um pedido em processamento, aguarde um pouco.')
 
     pedido_resp = dict(result) if result else {}
+
+    # Push no aparelho do admin (funciona mesmo com o painel fechado)
+    try:
+        from api.routers.push import agendar_push
+        agendar_push(background, '🛒 Nova compra!', f"Pedido {pedido_resp.get('id_pedido') or '#' + str(pedido_resp.get('id'))} • {pedido_resp.get('status')}")
+    except Exception:
+        pass
 
     # Sem pagamento confirmado, NAO retorna o protocolo do pedido
     # (nem o frontend deve exibir mensagem de sucesso antes da aprovacao).

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.database import create_db_pool
-from api.routers import admins, cliente, consent, endereco, frete, itens_pedido, login, pagamento, pedidos, produtos, rastreio, upload, usuarios
+from api.routers import admins, cliente, consent, endereco, frete, itens_pedido, login, pagamento, pedidos, produtos, push, rastreio, upload, usuarios
 from api.settings import settings
 
 
@@ -35,6 +35,8 @@ app.include_router(pedidos.router)
 app.include_router(usuarios.router)
 app.include_router(cliente.router)
 app.include_router(pagamento.router)
+app.include_router(pagamento.payments_router)
+app.include_router(push.router)
 app.include_router(itens_pedido.router)
 app.include_router(upload.router)
 app.include_router(admins.router)

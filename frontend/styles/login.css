@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   padding: 40px 24px;
-  background: url('https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?w=1920&q=80') center/cover no-repeat;
+  background: linear-gradient(135deg, #0e2f1a 0%, #1a472a 60%, #2d6b4a 100%);
   position: relative;
 }
 

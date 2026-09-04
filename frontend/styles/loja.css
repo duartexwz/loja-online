@@ -234,7 +234,7 @@
 .detail-img {
   height: 100%;
   min-height: 340px;
-  background: url('https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&q=80') center/cover no-repeat;
+  background: linear-gradient(135deg, var(--cinza-200) 0%, var(--cinza-100) 100%);
   display: flex;
   align-items: center;
   justify-content: center;

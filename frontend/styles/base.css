@@ -897,6 +897,94 @@ footer hr.divisor {
   border-bottom: 1px solid var(--cinza-200);
 }
 
+/* ======================== CHECKOUT BRICK (MERCADO PAGO) ======================== */
+
+#brick_container,
+#brick_container_modal {
+  margin-top: 16px;
+  min-height: 120px;
+  background: var(--off-white);
+  border: 1px solid var(--cinza-200);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+#brick_container:empty,
+#brick_container_modal:empty {
+  display: none;
+}
+
+#brick_container iframe,
+#brick_container_modal iframe {
+  width: 100% !important;
+  max-width: 100%;
+  min-width: 0;
+  border: 0;
+}
+
+/* Contém os elementos internos do Brick dentro do container */
+#brick_container_modal {
+  overflow-x: clip;
+  min-width: 0;
+}
+
+/* ======================== MODAL CENTRALIZADA DE PAGAMENTO ======================== */
+
+.pagamento-overlay {
+  z-index: 2000;
+}
+
+.pagamento-modal {
+  width: calc(100% - 32px);
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: var(--radius-xl);
+  position: relative;
+}
+
+.pagamento-modal-body {
+  padding: 28px 24px;
+}
+
+.pagamento-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.pagamento-modal .modal-title {
+  padding-right: 40px;
+}
+
+#brick_container_modal {
+  margin-top: 12px;
+}
+
+.brick-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 12px;
+  color: var(--cinza-500);
+  font-size: 0.85rem;
+}
+
+.brick-spinner {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 2px solid var(--cinza-300);
+  border-top-color: var(--verde-lacoste);
+  border-radius: var(--radius-full);
+  animation: brick-spin 0.8s linear infinite;
+}
+
+@keyframes brick-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ======================== TOAST ======================== */
 
 .toast-container {
@@ -1057,6 +1145,95 @@ body.mobile-menu-open {
     padding: 16px;
   }
 
+  #brick_container,
+  #brick_container_modal {
+    padding: 10px;
+    min-height: 90px;
+    margin-top: 10px;
+  }
+
+  /* Modal de pagamento compacta no mobile */
+  .pagamento-modal {
+    width: calc(100% - 16px);
+    max-height: 94vh;
+    border-radius: var(--radius-lg);
+  }
+
+  .pagamento-modal-body {
+    padding: 20px 14px;
+  }
+
+  .pagamento-modal .modal-title {
+    font-size: 1.15rem;
+    margin-bottom: 6px;
+    padding-right: 36px;
+  }
+
+  .pagamento-modal .modal-text {
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    line-height: 1.45;
+  }
+
+  .pagamento-close {
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    font-size: 1.1rem;
+  }
+
+  /* Trava os elementos internos do Brick na largura do container (não pulam para fora) */
+  .pagamento-modal {
+    overflow-x: hidden;
+  }
+
+  .pagamento-modal-body {
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  #brick_container_modal div,
+  #brick_container_modal form,
+  #brick_container_modal fieldset {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+  }
+
+  /* QR Pix e textos da modal de pagamento no mobile */
+  #brick_container_modal img {
+    max-width: 200px !important;
+    width: 100%;
+    height: auto;
+    margin: 8px auto;
+  }
+
+  #brick_container_modal p {
+    font-size: 0.82rem;
+  }
+
+  #brick_container_modal .btn {
+    padding: 10px 14px;
+    min-height: 42px;
+    font-size: 0.85rem;
+  }
+
+  #pixCopiaCola {
+    font-size: 0.7rem !important;
+    padding: 8px !important;
+  }
+
+  .brick-loading {
+    padding: 20px 8px;
+    font-size: 0.78rem;
+  }
+
+  .brick-spinner {
+    width: 16px;
+    height: 16px;
+  }
+
   .cart-item {
     gap: 12px;
     padding: 12px 0;
@@ -1073,6 +1250,28 @@ body.mobile-menu-open {
 
   .modal-body {
     padding: 32px 24px;
+  }
+
+  /* Modais no mobile: overlay com scroll a partir do topo (nunca corta conteúdo alto) */
+  .modal-overlay {
+    padding: 12px;
+    overflow-y: auto;
+    align-items: flex-start;
+  }
+
+  .modal-overlay .modal {
+    margin: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .checkout-section {
+    margin-bottom: 24px;
+  }
+
+  .checkout-section-title {
+    font-size: 1rem;
+    margin-bottom: 16px;
   }
 
   .hamburger {

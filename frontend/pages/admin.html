@@ -2,10 +2,11 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" href="data:,">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JP Croco - Painel Administrativo</title>
-  <link rel="stylesheet" href="/styles/base.css?v=12">
-  <link rel="stylesheet" href="/styles/admin.css?v=12">
+  <link rel="stylesheet" href="/styles/base.css?v=23">
+  <link rel="stylesheet" href="/styles/admin.css?v=21">
 </head>
 <body>
   <div id="header"></div>
@@ -54,10 +55,10 @@
 
   <div id="footer"></div>
 
-  <script src="/script/config.js?v=10"></script>
-  <script src="/script/api.js?v=10"></script>
-  <script src="/script/cart.js?v=10"></script>
-  <script src="/script/components.js?v=10"></script>
+  <script src="/script/config.js?v=21"></script>
+  <script src="/script/api.js?v=21"></script>
+  <script src="/script/cart.js?v=21"></script>
+  <script src="/script/components.js?v=24"></script>
   <script>
     const Admin = {
       _currentTab: 'dashboard',
@@ -79,8 +80,23 @@
         if(!this._lastPaidId){
           try{ const d=await api.getPedidos({limit:1000}); const max=Math.max(0,...(d.pedidos||[]).map(p=>p.id)); this._lastPaidId=max; localStorage.setItem('admin_last_pedido_id', String(max)); }catch(_){}
         }
+        // Semeia o snapshot de status sem notificar (evita spam de "novas compras" no 1º load)
+        try {
+          const d0 = await api.getPedidos({ limit: 1000 });
+          const snap0 = {};
+          (d0.pedidos || []).forEach(p => { snap0[p.id] = (p.status || '').toLowerCase(); });
+          this._snapshotPedidos = snap0;
+          localStorage.setItem('admin_pedidos_snapshot', JSON.stringify(snap0));
+        } catch (_) {
+          try { this._snapshotPedidos = JSON.parse(localStorage.getItem('admin_pedidos_snapshot') || '{}'); }
+          catch (_) { this._snapshotPedidos = {}; }
+        }
         this._criarSino();
+        this._criarPainelAuto();
+        this._registrarSW();
         this._pollInterval = setInterval(() => this.checarNovosPedidos(), 10000);
+        // Auto-reload da aba atual a cada 60s (com contagem regressiva visível)
+        this._tickInterval = setInterval(() => this._tickReload(), 1000);
         // também checa ao focar a aba
         window.addEventListener('focus', ()=> this.checarNovosPedidos());
       },
@@ -94,30 +110,218 @@
         sino.onclick=()=>{ document.getElementById('adminSinoBadge').style.display='none'; this.switchTab('pedidos'); };
         header.querySelector('.nav-topo')?.appendChild(sino);
       },
-      _atualizarSino(novos){
+      _atualizarSino(novos, somar){
         const b=document.getElementById('adminSinoBadge');
-        if(b){ b.textContent=novos; b.style.display='inline-block'; }
+        if(b){
+          const atual = somar ? (parseInt(b.textContent||'0',10)||0) : 0;
+          b.textContent = atual + novos;
+          b.style.display='inline-block';
+        }
         // som simples
         try{ const a=new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=='); a.volume=0.3; a.play().catch(()=>{});}catch(_){}
+      },
+      // Registra o Service Worker (push de verdade no aparelho; exige HTTPS/ngrok ou localhost)
+      async _registrarSW(){
+        this._swReg = null;
+        try{
+          if(!('serviceWorker' in navigator)) return;
+          this._swReg = await navigator.serviceWorker.register('/sw.js');
+        }catch(_){
+          // HTTP puro de LAN não é contexto seguro: SW não registra; segue toast+som+vibração
+          this._swReg = null;
+        }
+        this._renderNotifBtn();
+        // Se já tem permissão, garante a inscrição push (para receber com o site fechado)
+        try{
+          if(this._swReg && window.Notification && Notification.permission==='granted' && this._notifAtiva !== false){
+            await this._inscreverPush();
+          }
+        }catch(_){}
+      },
+      _urlBase64ToUint8(b64){
+        const p = '='.repeat((4 - b64.length % 4) % 4);
+        const s = (b64 + p).replace(/-/g, '+').replace(/_/g, '/');
+        const r = atob(s);
+        const o = new Uint8Array(r.length);
+        for(let i = 0; i < r.length; i++) o[i] = r.charCodeAt(i);
+        return o;
+      },
+      // Inscreve este aparelho no Web Push do backend (chega mesmo com o site fechado)
+      async _inscreverPush(){
+        try{
+          if(!this._swReg || !('PushManager' in window)) return false;
+          const vap = await api.request('/push/vapid-key').catch(()=>null);
+          const key = vap && vap.public_key;
+          if(!key) return false;
+          let sub = await this._swReg.pushManager.getSubscription();
+          if(!sub) sub = await this._swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: this._urlBase64ToUint8(key) });
+          await api.request('/push/subscribe', { method: 'POST', body: JSON.stringify(sub.toJSON()) });
+          return true;
+        }catch(e){ console.warn('push subscribe falhou', e); return false; }
+      },
+      async _desinscreverPush(){
+        try{
+          const s = await this._swReg?.pushManager.getSubscription();
+          const ep = s && s.endpoint;
+          if(s) await s.unsubscribe();
+          if(ep) await api.request('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: ep }) }).catch(()=>{});
+        }catch(_){}
+      },
+      // Central de notificação: PAINEL (toast) + APARELHO (push via SW, som, vibração, título)
+      async _notificarCompra(titulo, corpo){
+        // 1) Sempre no painel do admin
+        try{ Componentes.toast(`${titulo} — ${corpo}`, 'success'); }catch(_){}
+        if(this._notifAtiva === false) return;
+        // 2) No aparelho: push do sistema via Service Worker (funciona com tela bloqueada)
+        let pushOk = false;
+        try{
+          if(this._swReg && window.Notification && Notification.permission==='granted'){
+            await this._swReg.showNotification(titulo, {
+              body: corpo, tag: 'jpcroco-pedido', renotify: true, vibrate: [200,100,200],
+            });
+            pushOk = true;
+          }
+        }catch(_){}
+        // Fallback: Notification direta (desktop / sem SW)
+        if(!pushOk){
+          try{
+            if(window.Notification && Notification.permission==='granted'){ new Notification(titulo, {body: corpo}); pushOk = true; }
+            else if(window.Notification && Notification.permission!=='denied'){ Notification.requestPermission().catch(()=>{}); }
+          }catch(_){}
+        }
+        // 3) Som + vibração no aparelho
+        try{ const a=new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=='); a.volume=0.4; a.play().catch(()=>{}); }catch(_){}
+        try{ if(navigator.vibrate) navigator.vibrate([200,100,200]); }catch(_){}
+        // 4) Pisca o título da aba (visível mesmo sem permissão de push)
+        try{
+          if(!this._titleFlash){ this._titleOrig = document.title; this._titleFlashN = 0; }
+          clearInterval(this._titleFlash);
+          this._titleFlashN = (this._titleFlashN||0) + 1;
+          let on = false;
+          this._titleFlash = setInterval(()=>{
+            on = !on;
+            document.title = on ? `(${this._titleFlashN}) ${titulo}` : this._titleOrig;
+            if(!on && document.hasFocus()){ clearInterval(this._titleFlash); this._titleFlashN = 0; document.title = this._titleOrig; }
+          }, 1000);
+        }catch(_){}
+        // 5) Avisa se o push do aparelho está indisponível (ex.: HTTP de LAN sem HTTPS)
+        if(!pushOk) this._avisarPushIndisponivel();
+      },
+      _avisarPushIndisponivel(){
+        if(this._pushAvisoDado) return;
+        const seguro = window.isSecureContext;
+        const perm = (window.Notification && Notification.permission) || 'indisponível';
+        if(!seguro || perm==='denied' || !('serviceWorker' in navigator)){
+          this._pushAvisoDado = true;
+          Componentes.toast('Push no aparelho indisponível aqui (use o link HTTPS/ngrok e permita notificações no navegador). No painel você continua sendo avisado.', 'info');
+        }
+      },
+      _renderNotifBtn(){
+        const btn = document.getElementById('adminNotifToggle');
+        if(!btn) return;
+        const perm = (window.Notification && Notification.permission) || '?';
+        if(!this._notifAtiva) btn.textContent = '🔕 OFF';
+        else if(perm === 'granted') btn.textContent = '🔔 ON';
+        else if(perm === 'denied') btn.textContent = '🔕 Bloq.';
+        else btn.textContent = '🔔 Ativar';
+      },
+      // Painel flutuante: contagem do auto-reload + toggles de reload e notificação
+      _autoReloadSegundos: 60,
+      _reloadRestante: 60,
+      _autoReloadAtivo: true,
+      _notifAtiva: true,
+      _criarPainelAuto(){
+        if(document.getElementById('adminAutoBar')) return;
+        const bar=document.createElement('div');
+        bar.id='adminAutoBar';
+        bar.style.cssText='position:fixed;bottom:14px;right:14px;z-index:9500;display:flex;gap:8px;align-items:center;background:#111;color:#fff;padding:8px 12px;border-radius:999px;font-size:.75rem;box-shadow:0 8px 24px rgba(0,0,0,.25)';
+        bar.innerHTML=`<span id="adminReloadInfo">↻ em 60s</span>
+          <button id="adminReloadToggle" style="background:#fff;color:#111;border:none;border-radius:999px;padding:4px 10px;font-size:.72rem;font-weight:700;cursor:pointer">Pausar</button>
+          <button id="adminNotifToggle" style="background:#25D366;color:#fff;border:none;border-radius:999px;padding:4px 10px;font-size:.72rem;font-weight:700;cursor:pointer">🔔 ON</button>`;
+        document.body.appendChild(bar);
+        document.getElementById('adminReloadToggle').onclick=()=>this._toggleAutoReload();
+        document.getElementById('adminNotifToggle').onclick=()=>this._toggleNotificacoes();
+        this._renderNotifBtn();
+      },
+      _toggleAutoReload(){
+        this._autoReloadAtivo=!this._autoReloadAtivo;
+        this._reloadRestante=this._autoReloadSegundos;
+        document.getElementById('adminReloadToggle').textContent=this._autoReloadAtivo?'Pausar':'Retomar';
+        this._renderReloadInfo();
+        Componentes.toast(this._autoReloadAtivo?'Auto-reload ativado (60s).':'Auto-reload pausado.', 'info');
+      },
+      async _toggleNotificacoes(){
+        // Liga: pede permissão do sistema, inscreve o aparelho no push e mostra estado real
+        if(this._notifAtiva === false || (window.Notification && Notification.permission !== 'granted')){
+          if(window.Notification){
+            try{ await Notification.requestPermission(); }catch(_){}
+            if(Notification.permission === 'denied'){
+              Componentes.toast('Notificações bloqueadas no navegador. Ative nas configurações do site e tente de novo.', 'error');
+              this._renderNotifBtn();
+              return;
+            }
+          }
+          this._notifAtiva = true;
+          const pushOk = await this._inscreverPush();
+          this._renderNotifBtn();
+          this._notificarCompra('Notificações ativadas', pushOk ? 'Este aparelho recebe push mesmo com o site fechado.' : 'Você será avisado no painel; push com site fechado indisponível aqui (use HTTPS).');
+          return;
+        }
+        this._notifAtiva = false;
+        await this._desinscreverPush();
+        this._renderNotifBtn();
+        Componentes.toast('Notificações do aparelho pausadas (painel continua avisando).', 'info');
+      },
+      _renderReloadInfo(){
+        const el=document.getElementById('adminReloadInfo');
+        if(el) el.textContent=this._autoReloadAtivo?`↻ em ${this._reloadRestante}s`:'↻ pausado';
+      },
+      _tickReload(){
+        if(!this._autoReloadAtivo) return;
+        this._reloadRestante-=1;
+        if(this._reloadRestante<=0){ this._reloadRestante=this._autoReloadSegundos; this._autoReload(); }
+        this._renderReloadInfo();
+      },
+      async _autoReload(){
+        // Não recarrega no meio de edição: modal aberta ou digitando em campo
+        if(document.getElementById('adminModal')?.classList.contains('ativo')) return;
+        const foco=document.activeElement;
+        if(foco && ['INPUT','TEXTAREA','SELECT'].includes(foco.tagName)) return;
+        try{ await this['load'+this._currentTab.charAt(0).toUpperCase()+this._currentTab.slice(1)](); }catch(_){}
       },
       async checarNovosPedidos() {
         try {
           const data = await api.getPedidos({ limit: 1000 });
           const pedidos=(data.pedidos||[]).slice().sort((a,b)=>b.id-a.id);
           const maxId=pedidos.length?Math.max(...pedidos.map(p=>p.id)):0;
-          if(maxId > this._lastPaidId){
-            const novosPedidos=pedidos.filter(p=> p.id>this._lastPaidId && ['pago','enviado'].includes((p.status||'').toLowerCase()));
-            if(novosPedidos.length){
-              this._atualizarSino(novosPedidos.length);
-              Componentes.toast(`${novosPedidos.length} nova(s) compra(s) aprovada(s)! Pedido #${novosPedidos[0].id_pedido||novosPedidos[0].id}`, 'success');
-              // notificação nativa se permitido
-              if(Notification && Notification.permission==='granted'){ new Notification('JP Croco - Nova venda!', {body:`Pedido #${novosPedidos[0].id_pedido} - R$ ${novosPedidos[0].valor_total}`}); }
-              else if(Notification && Notification.permission!=='denied'){ Notification.requestPermission(); }
-              if (this._currentTab === 'pedidos') await this.loadPedidos();
-              else if (this._currentTab === 'dashboard') await this.loadDashboard();
+          const snap=this._snapshotPedidos||{};
+          let mudou=false;
+          const nomesStatus={pago:'Pagamento aprovado ✅',enviado:'Pedido enviado 📦',entregue:'Pedido entregue ✔',recusado:'Pedido recusado ✕',cancelado:'Pedido cancelado ✕',pendente:'Aguardando pagamento ⏳'};
+          for(const p of pedidos){
+            const st=(p.status||'').toLowerCase();
+            const idp=p.id_pedido||('#'+p.id);
+            if(!(p.id in snap)){
+              // Novo pedido criado (qualquer status = evento de compra)
+              this._atualizarSino(1, true);
+              this._notificarCompra('🛒 Nova compra!', `Pedido ${idp} • ${p.status} • ${api.formatarMoeda(p.valor_total)}`);
+              mudou=true;
+            }else if(snap[p.id]!==st){
+              // Mudança de status (pagamento aprovado, envio, entrega, recusa...)
+              this._atualizarSino(1, true);
+              this._notificarCompra('🔔 Atualização de pedido', `Pedido ${idp}: ${nomesStatus[st]||p.status}`);
+              mudou=true;
             }
+            snap[p.id]=st;
+          }
+          this._snapshotPedidos=snap;
+          try{ localStorage.setItem('admin_pedidos_snapshot', JSON.stringify(snap)); }catch(_){}
+          if(maxId > this._lastPaidId){
             this._lastPaidId=maxId;
             localStorage.setItem('admin_last_pedido_id', String(maxId));
+          }
+          if(mudou){
+            if (this._currentTab === 'pedidos') await this.loadPedidos();
+            else if (this._currentTab === 'dashboard') await this.loadDashboard();
           }
         } catch(_) {}
       },
