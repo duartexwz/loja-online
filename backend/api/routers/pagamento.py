@@ -17,7 +17,7 @@ WEBHOOK_SECRET = settings.MERCADOPAGO_WEBHOOK_SECRET
 
 
 router = APIRouter(prefix='/webhook', tags=['webhook'])
-payments_router = APIRouter(prefix='/api/payments', tags=['payments'])
+payments_router = APIRouter(prefix='/payments', tags=['payments'])
 dbConnection = Annotated[asyncpg.Connection, Depends(get_db)]
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
@@ -223,9 +223,9 @@ async def criar_preferencia(pedido_id: int, db: dbConnection, current_user: Curr
     base = _url_retorno_pagamento(settings.FRONTEND_URL)
     if base:
         preference_data['back_urls'] = {
-            'success': f'{base}/pages/home.html',
-            'failure': f'{base}/pages/home.html',
-            'pending': f'{base}/pages/home.html',
+            'success': f'{base}/',
+            'failure': f'{base}/',
+            'pending': f'{base}/',
         }
         if base.startswith('https'):
             preference_data['auto_return'] = 'approved'

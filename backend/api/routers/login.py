@@ -244,7 +244,7 @@ async def esqueci_senha(dados: ForgotPasswordRequest, db: database_loja):
     token_sub = username or dados.email
     reset_token = await create_reset_token(token_sub)
     frontend_url = settings.FRONTEND_URL
-    link = f'{frontend_url}/pages/redefinir-senha.html?token={reset_token}'
+    link = f'{frontend_url}/redefinir-senha?token={reset_token}'
 
     await _enviar_email(email_destino, link)
 

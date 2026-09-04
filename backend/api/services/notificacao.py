@@ -13,7 +13,7 @@ def _msg_rastreio(nome: str, id_pedido: str, codigo: str, transportadora: str) -
     return (
         f"Olá {nome or 'cliente'}! Seu pedido {id_pedido} foi enviado via {transportadora}.\n"
         f"Código de rastreio: {codigo}\n"
-        f"Acompanhe em: {settings.FRONTEND_URL}/pages/minhas-compras.html ou https://www2.correios.com.br/sistemas/rastreamento/\n"
+        f"Acompanhe em: {settings.FRONTEND_URL}/minhas-compras ou https://www2.correios.com.br/sistemas/rastreamento/\n"
         f"Entrega para todo o Brasil."
     )
 

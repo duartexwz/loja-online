@@ -22,6 +22,54 @@ class CalcularFreteRequest(BaseModel):
     # para cálculo por carrinho: lista de produto_ids + qtd
     itens: Optional[list[dict]] = None
 
+def _extrair_valor_prazo(resposta: dict, co_produto: str, fallback_valor: float, fallback_prazo: int) -> tuple[float, int]:
+    """Extrai valor e prazo da resposta heterogênea da API dos Correios.
+
+    A API CWS pode devolver formatos diferentes conforme versão/ambiente
+    (lista de itens, dict aninhado, strings com vírgula decimal). O parser é
+    defensivo: tenta vários caminhos e cai no fallback calculado por peso.
+    """
+    valor, prazo = fallback_valor, fallback_prazo
+    if not isinstance(resposta, dict):
+        return valor, prazo
+    candidatos = []
+    for chave in ('preco', 'precos', 'dados', 'itens', 'result', 'resultado'):
+        v = resposta.get(chave)
+        if isinstance(v, list):
+            candidatos.extend(v)
+        elif isinstance(v, dict):
+            candidatos.append(v)
+    candidatos.append(resposta)
+    for item in candidatos:
+        if not isinstance(item, dict):
+            continue
+        for k in ('vlTotal', 'valor', 'preco', 'price', 'vl_preco'):
+            raw = item.get(k)
+            if raw is None:
+                continue
+            try:
+                if isinstance(raw, str):
+                    raw = raw.replace('R$', '').strip().replace('.', '').replace(',', '.') if ',' in raw else raw
+                num = float(raw)
+                if num > 0:
+                    valor = round(num, 2)
+                    break
+            except (ValueError, TypeError):
+                continue
+        for k in ('prazoEntrega', 'prazo', 'dias', 'prazo_dias'):
+            raw = item.get(k)
+            if raw is None:
+                continue
+            try:
+                num = int(str(raw).split()[0])
+                if num > 0:
+                    prazo = num
+                    break
+            except (ValueError, TypeError, IndexError):
+                continue
+    return valor, prazo
+
+
 @router.post('/calcular')
 async def calcular(req: CalcularFreteRequest):
     try:
@@ -83,7 +131,36 @@ async def calcular(req: CalcularFreteRequest):
             }
 
         res = await calcular_frete(req.cepDestino, ps, comp, larg, alt, req.tpObjeto or 2, req.vlDeclarado, req.coProduto)
-        return {"cepDestino": req.cepDestino, "pesoTaxavel": taxavel, **res, "mock": False}
+        # Normaliza a resposta real dos Correios para o mesmo formato do mock
+        # (o frontend sempre espera `opcoes`). Nunca retorna prazo/preco crus.
+        from api.settings import settings as _s
+        base_mock = round(18 + (taxavel / 1000) * 4, 2)
+        try:
+            prazo_raw, preco_raw = res.get('prazo', {}), res.get('preco', {})
+            v_pac, p_pac = _extrair_valor_prazo(preco_raw if isinstance(preco_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_PAC, base_mock, 5)
+            # tenta extrair prazo do payload de prazo separadamente
+            _, p_pac2 = _extrair_valor_prazo(prazo_raw if isinstance(prazo_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_PAC, v_pac, p_pac)
+            v_sedex, p_sedex = _extrair_valor_prazo(preco_raw if isinstance(preco_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_SEDEX, round(base_mock * 1.6, 2), 2)
+            _, p_sedex2 = _extrair_valor_prazo(prazo_raw if isinstance(prazo_raw, dict) else {}, _s.CORREIOS_CO_PRODUTO_SEDEX, v_sedex, p_sedex)
+            opcoes = [
+                {'servico': 'PAC', 'coProduto': _s.CORREIOS_CO_PRODUTO_PAC, 'valor': v_pac, 'prazo': p_pac2},
+                {'servico': 'SEDEX', 'coProduto': _s.CORREIOS_CO_PRODUTO_SEDEX, 'valor': v_sedex, 'prazo': p_sedex2},
+            ]
+        except Exception:
+            opcoes = [
+                {'servico': 'PAC', 'coProduto': _s.CORREIOS_CO_PRODUTO_PAC, 'valor': base_mock, 'prazo': 5},
+                {'servico': 'SEDEX', 'coProduto': _s.CORREIOS_CO_PRODUTO_SEDEX, 'valor': round(base_mock * 1.6, 2), 'prazo': 2},
+            ]
+        return {
+            'cepDestino': req.cepDestino,
+            'pesoReal': ps,
+            'pesoCubadoKg': round((comp * larg * alt) / 6000, 2),
+            'pesoTaxavel': taxavel,
+            'dimensoes': {'comp': comp, 'larg': larg, 'alt': alt},
+            'opcoes': opcoes,
+            'mock': False,
+            'raw': {'prazo': res.get('prazo'), 'preco': res.get('preco')},
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

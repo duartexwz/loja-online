@@ -11,6 +11,9 @@ class PedidosSchema(BaseModel):
     endereco_entrega: str
     valor_total: Decimal
     entrega_tipo: Optional[str] = 'Correios'
+    valor_frete: Optional[Decimal] = Decimal('0.00')
+    subtotal: Optional[Decimal] = None
+    cep_destino: Optional[str] = None
 
 
 class PedidosResponseSchema(BaseModel):
@@ -24,6 +27,9 @@ class PedidosResponseSchema(BaseModel):
     data_envio: Optional[datetime] = None
     transportadora: Optional[str] = None
     entrega_tipo: Optional[str] = None
+    valor_frete: Optional[Decimal] = None
+    subtotal: Optional[Decimal] = None
+    cep_destino: Optional[str] = None
 
 
 class FilterPage(BaseModel):
@@ -40,6 +46,9 @@ class PedidosUpdate(BaseModel):
     codigo_rastreio: Optional[str] = None
     transportadora: Optional[str] = None
     entrega_tipo: Optional[str] = None
+    valor_frete: Optional[Decimal] = None
+    subtotal: Optional[Decimal] = None
+    cep_destino: Optional[str] = None
 
 
 class PedidosList(BaseModel):
